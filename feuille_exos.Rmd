@@ -1,0 +1,147 @@
+---
+title: "Feuille d'exercice"
+author: "Thomas Vroylandt"
+date: "24 mars 2020"
+output: html_document
+params:
+  correction: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# Contexte
+
+On va s'intéresser aux données de la STMT sur les demandeurs d'emploi pour la Creuse en 2019. L'idée va être de sortir les principales statistiques sur ces personnes et d'analyser quelques grandes répartitions.
+
+# Packages
+
++ On créé un projet RStudio ;
++ On charge les packages qui vont nous être utiles.
+
+```{r packages, include=params$correction}
+library(tidyverse)
+library(haven)
+library(readxl)
+```
+
+# Import des données
+
++ Sauvegarder les données en local dans un dossier `data` au sein du projet ;
++ Importer les données dans un objet.
+
+```{r import, include=params$correction}
+df_stmt_creuse <- read_sas("data/stmt_2019_creuse.sas7bdat")
+```
+
++ Visualiser ces données :
+  
+  + Combien de lignes ?
+  + Combien de colonnes ?
+  + A quoi ressemblent les données ?
+
+```{r dim, include=params$correction}
+dim(df_stmt_creuse)
+
+# View(df_stmt_creuse)
+```
+
++ Les types de variables sont-ils cohérents avec leur contenu ?
++ Sinon il faut recoder les variables (avec `as.character()` ou `as.numeric()`).
+
+# Recodage des données
+
+On va chercher ici à avoir des données propres :
+
+
+## Renommer
+
++ Renommer les variables en minuscule ;
+
+```{r rename, include=params$correction}
+df_stmt_creuse_recode1 <- df_stmt_creuse %>%
+  rename(
+    moista = MOISTA,
+    sex = SEX,
+    typdem = TYPDEM,
+    rome = ROME,
+    catsta = CATSTA,
+    trcancsta = TRCANCSTA,
+    qlf = QLF,
+    annnai = ANNNAI
+  ) 
+```
+
+## Recodage des niveaux
+
++ Pour le ROME, charger le référentiel et le joindre pour obtenir les libellés ;
+
+```{r ref_rome, include=params$correction}
+ref_rome <- read_xlsx("data/ref_rome.xlsx")
+```
++ Recoder le sexe en homme / femme ;
++ Regrouper l'ancienneté en - 6 mois / 6 mois à 1 an / 1 an et plus ;
++ Regrouper la qualification en employé / ouvrier / agent de maîtrise et technicien / cadre ;
+
+```{r recodage, include=params$correction}
+df_stmt_creuse_recode2 <- df_stmt_creuse_recode1 %>%
+  left_join(ref_rome, by = c("rome" = "code_rome")) %>%
+  mutate(
+    sex = fct_recode(sex,
+                     "Homme" = "1",
+                     "Femme" = "2"),
+    tr_anciennete = fct_collapse(
+      trcancsta,
+      "Moins de 6 mois" = c("10", "11"),
+      "6 à 12 mois" = c("12"),
+      "Un an et plus" = c("20", "30", "40")
+    ),
+    qualif = fct_collapse(
+      qlf,
+      "Ouvrier" = c("1", "2", "3", "4"),
+      "Employé" = c("5", "6"),
+      "AMT" = c("7", "8"),
+      "Cadre" = "9"
+    )
+  )
+```
+
+## Calcul de variables
+
++ Calculer l'âge ;
++ Calculer l'année et le mois (avec la fonction `str_sub()`) ;
+
+```{r calcul, include=params$correction}
+df_stmt_creuse_recode3 <- df_stmt_creuse_recode2 %>%
+  mutate(
+    age = 2019 - annnai,
+    annee = str_sub(moista, 1, 4),
+    mois = str_sub(moista, 5, 7)
+  ) 
+```
+
+## Sélection des variables
+
++ Ne sélectionner que les variables d'intérêt.
+
+```{r select, include=params$correction}
+df_stmt_creuse_recode <- df_stmt_creuse_recode3 %>%
+  select(annee, mois, typdem, catsta, rome, lib_rome, tr_anciennete, qualif, age)
+```
+
+# Calcul des agrégats
+
+
+# Analyse de la DEFM de janvier
+
+
+# Export des résultats
+
+# BONUS : graphiques
+
+
