@@ -4,7 +4,7 @@ author: "Thomas Vroylandt"
 date: "24 mars 2020"
 output: html_document
 params:
-  correction: TRUE
+  correction: FALSE
 ---
 
 ```{r setup, include=FALSE}
@@ -219,10 +219,152 @@ df_stmt_agregat_creuse_sex %>%
 
 # Analyse de la DEFM de janvier
 
+On va maintenant filtrer sur la DEFM de janvier et analyser les caractéristiques de la population.
+
+## Tri à plat
+
++ Filtrer sur la DEFM de janvier ;
+
+```{r filtre_janv, include=params$correction}
+df_stmt_creuse_janv <- df_stmt_creuse_recode %>% 
+  filter(mois == "01" & typdem %in% c("1", "4"))
+```
+
++ Faire les tri à plat par tranche d'ancienneté, qualification et catégorie ;
+
+```{r tri_plat, include=params$correction}
+df_stmt_creuse_janv %>% 
+  group_by(tr_anciennete) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(part = round(n / sum(n) * 100, 1))
+
+df_stmt_creuse_janv %>% 
+  group_by(qualif) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(part = round(n / sum(n) * 100, 1))
+
+df_stmt_creuse_janv %>% 
+  group_by(catsta) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(part = round(n / sum(n) * 100, 1))
+```
+
+## Tri croisé
+
++ Faire le croisement qualification / catégorie ;
++ Calculer la part de chaque qualification au sein des catégories ;
++ Mettre en forme le tableau.
+
+```{r tri_croise, include=params$correction}
+tri_croise <- df_stmt_creuse_janv %>% 
+  group_by(qualif, catsta) %>% 
+  count() %>% 
+  group_by(catsta) %>%  
+  mutate(part = round(n / sum(n) * 100, 1)) %>% 
+  ungroup()
+
+tri_croise %>% 
+  select(-n) %>% 
+  pivot_wider(names_from = catsta, values_from = part)
+```
+
+## Tops
+
++ Quel sont les 10 métiers avec le plus de demandeurs d'emploi ?
+
+```{r top_rome, include=params$correction}
+df_stmt_creuse_janv %>% 
+  filter(!is.na(lib_rome)) %>% 
+  group_by(rome, lib_rome) %>% 
+  count(sort = TRUE) %>% 
+  ungroup() %>% 
+  top_n(10, wt = n)
+```
+
++ Calculer l'âge moyen et médian par métier.
+
+```{r rome_age, include=params$correction}
+df_rome_age <- df_stmt_creuse_janv %>% 
+  filter(!is.na(lib_rome)) %>% 
+  group_by(rome, lib_rome) %>% 
+  summarise(nb_defm = n(),
+            age_mean = mean(age),
+            age_median = median(age)) %>%  
+  ungroup()
+
+df_rome_age
+```
+
++ Quels sont les 5 métiers les plus jeunes / plus âgés.
+
+```{r top_age, include=params$correction}
+df_rome_age %>% 
+  top_n(5, wt = age_mean)
+
+df_rome_age %>% 
+  top_n(5, wt = -age_mean)
+```
+
++ Le refaire uniquement pour les métiers avec au moins 50 DE.
+
+```{r top_age_filtre , include=params$correction}
+df_rome_age %>%
+  filter(nb_defm >= 50) %>%
+  top_n(5, wt = age_mean)
+
+df_rome_age %>%
+  filter(nb_defm >= 50) %>%
+  top_n(5, wt = -age_mean)
+```
+
 
 # Export des résultats
 
++ Exporter le tri croisé qualification / catégorie.
+
+```{r export_tri_croise, include=params$correction, eval=FALSE}
+writexl::write_xlsx(tri_croise, "export_tri_croise.xlsx")
+```
 
 # BONUS : graphiques
 
++ Faire le diagramme en barre de l'âge moyen par niveau de qualification ;
 
+```{r bar, include=params$correction}
+df_stmt_creuse_janv %>%
+  filter(qualif != "0") %>%
+  group_by(qualif) %>%
+  summarise(age_mean = mean(age)) %>%
+  ggplot(aes(x = qualif, y = age_mean)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  geom_text(aes(label = round(age_mean, 1)),
+            size = 8,
+            position = position_fill(vjust = 20)) +
+  scale_x_discrete(name = "Qualification") +
+  scale_y_continuous(name = "Age_moyen") +
+  theme_minimal()
+```
+
++ Afficher l'âge moyen des femmes en fonction de la part des femmes par métier
+
+```{r point, include=params$correction}
+df_stmt_creuse_janv %>% 
+  filter(!is.na(lib_rome)) %>% 
+  group_by(rome, lib_rome, sex) %>% 
+  summarise(age_mean = mean(age),
+            n = n()) %>% 
+  group_by(rome, lib_rome) %>% 
+  mutate(part_femme = n / sum(n) * 100,
+         n_tot = sum(n)) %>% 
+  filter(sex == "Femme") %>% 
+  ungroup() %>% 
+  top_n(20, wt = n_tot) %>% 
+  ggplot(aes(x = age_mean, y = part_femme, label = str_wrap(lib_rome, 25))) +
+  ggrepel::geom_label_repel(size = 3) +
+  scale_x_continuous(name = "Âge moyen", breaks = seq(20, 50, 2)) +
+  scale_y_continuous(name = "Part de femmes (en %)", breaks = seq(0, 100, 20)) +
+  theme_minimal()
+```
