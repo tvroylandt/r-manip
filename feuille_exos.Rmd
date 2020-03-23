@@ -47,8 +47,11 @@ df_stmt_creuse <- read_sas("data/stmt_2019_creuse.sas7bdat")
 
 ```{r dim, include=params$correction}
 dim(df_stmt_creuse)
+```
 
-# View(df_stmt_creuse)
+
+```{r view, include=params$correction, eval = FALSE}
+View(df_stmt_creuse)
 ```
 
 + Les types de variables sont-ils cohérents avec leur contenu ?
@@ -131,16 +134,94 @@ df_stmt_creuse_recode3 <- df_stmt_creuse_recode2 %>%
 
 ```{r select, include=params$correction}
 df_stmt_creuse_recode <- df_stmt_creuse_recode3 %>%
-  select(annee, mois, typdem, catsta, rome, lib_rome, tr_anciennete, qualif, age)
+  select(annee, mois, typdem, catsta, rome, lib_rome, sex, tr_anciennete, qualif, age)
 ```
 
 # Calcul des agrégats
 
+On va ici chercher à calculer le nombre de demandeurs d'emploi entrants, sortants et en fin de mois sur l'année, pour les DE en catégorie A, B, C.
+
+## DEE, DES et DEFM
+
++ Filtrer sur les catégories A, B, C.
+
+```{r filtrer, include=params$correction}
+df_stmt_creuse_abc <- df_stmt_creuse_recode %>%
+  filter(catsta %in% c("A", "B", "C"))
+```
+
+Les règles de gestion sont les suivantes (en fonction de la variable typdem):
+
++ les entrants : 3 et 4 ;
++ les sortants : 2 et 5 ;
++ la DEFM : 1 et 4.
+
+Il faut donc :
+
++ Coder trois compteurs en fonction de typdem ;
++ Sommer ces compteurs par mois.
+
+```{r agregats, include=params$correction}
+df_stmt_agregat_creuse <- df_stmt_creuse_abc %>% 
+  mutate(nb_dee = if_else(typdem %in% c("3", "4"), 1, 0),
+         nb_des = if_else(typdem %in% c("2", "5"), 1, 0),
+         nb_defm = if_else(typdem %in% c("1", "4"), 1, 0)) %>% 
+  group_by(mois) %>% 
+  summarise(nb_dee = sum(nb_dee),
+            nb_des = sum(nb_des),
+            nb_defm = sum(nb_defm)) %>%
+  ungroup()
+
+df_stmt_agregat_creuse
+```
+
+## Calcul de statistiques
+
+On va faire une analyse rapide de ces données :
+
++ Calculer la DEFM moyenne sur l'année ;
++ Ainsi que l'écart-type.
+
+```{r agregats_stats, include=params$correction}
+df_stmt_agregat_creuse %>% 
+  summarise(mean_defm = mean(nb_defm),
+            sd_defm = sd(nb_defm))
+```
+
+## Par sexe
+
++ Refaire le calcul des agrégats par sexe ;
+
+```{r agregats_sexe, include=params$correction}
+df_stmt_agregat_creuse_sex <- df_stmt_creuse_abc %>% 
+  mutate(nb_dee = if_else(typdem %in% c("3", "4"), 1, 0),
+         nb_des = if_else(typdem %in% c("2", "5"), 1, 0),
+         nb_defm = if_else(typdem %in% c("1", "4"), 1, 0)) %>% 
+  group_by(mois, sex) %>% 
+  summarise(nb_dee = sum(nb_dee),
+            nb_des = sum(nb_des),
+            nb_defm = sum(nb_defm)) %>%
+  ungroup()
+
+df_stmt_agregat_creuse_sex
+```
+
++ Calculer la part des femmes dans la DEFM de chaque mois.
+
+```{r agregats_part_femme, include=params$correction}
+df_stmt_agregat_creuse_sex %>% 
+  group_by(mois) %>% 
+  mutate(part_femme = nb_defm / sum(nb_defm) * 100) %>% 
+  ungroup() %>% 
+  filter(sex == "Femme") %>% 
+  select(mois, part_femme)
+```
 
 # Analyse de la DEFM de janvier
 
 
 # Export des résultats
+
 
 # BONUS : graphiques
 

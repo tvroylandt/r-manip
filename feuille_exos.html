@@ -400,7 +400,7 @@ library(readxl)</code></pre>
 </ul>
 <pre class="r"><code>dim(df_stmt_creuse)</code></pre>
 <pre><code>## [1] 125759      8</code></pre>
-<pre class="r"><code># View(df_stmt_creuse)</code></pre>
+<pre class="r"><code>View(df_stmt_creuse)</code></pre>
 <ul>
 <li>Les types de variables sont-ils cohérents avec leur contenu ?</li>
 <li>Sinon il faut recoder les variables (avec <code>as.character()</code> ou <code>as.numeric()</code>).</li>
@@ -477,8 +477,136 @@ library(readxl)</code></pre>
 <li>Ne sélectionner que les variables d’intérêt.</li>
 </ul>
 <pre class="r"><code>df_stmt_creuse_recode &lt;- df_stmt_creuse_recode3 %&gt;%
-  select(annee, mois, typdem, catsta, rome, lib_rome, tr_anciennete, qualif, age)</code></pre>
+  select(annee, mois, typdem, catsta, rome, lib_rome, sex, tr_anciennete, qualif, age)</code></pre>
 </div>
+</div>
+<div id="calcul-des-agrégats" class="section level1">
+<h1>Calcul des agrégats</h1>
+<p>On va ici chercher à calculer le nombre de demandeurs d’emploi entrants, sortants et en fin de mois sur l’année, pour les DE en catégorie A, B, C.</p>
+<div id="dee-des-et-defm" class="section level2">
+<h2>DEE, DES et DEFM</h2>
+<ul>
+<li>Filtrer sur les catégories A, B, C.</li>
+</ul>
+<pre class="r"><code>df_stmt_creuse_abc &lt;- df_stmt_creuse_recode %&gt;%
+  filter(catsta %in% c(&quot;A&quot;, &quot;B&quot;, &quot;C&quot;))</code></pre>
+<p>Les règles de gestion sont les suivantes (en fonction de la variable typdem):</p>
+<ul>
+<li>les entrants : 3 et 4 ;</li>
+<li>les sortants : 2 et 5 ;</li>
+<li>la DEFM : 1 et 4.</li>
+</ul>
+<p>Il faut donc :</p>
+<ul>
+<li>Coder trois compteurs en fonction de typdem ;</li>
+<li>Sommer ces compteurs par mois.</li>
+</ul>
+<pre class="r"><code>df_stmt_agregat_creuse &lt;- df_stmt_creuse_abc %&gt;% 
+  mutate(nb_dee = if_else(typdem %in% c(&quot;3&quot;, &quot;4&quot;), 1, 0),
+         nb_des = if_else(typdem %in% c(&quot;2&quot;, &quot;5&quot;), 1, 0),
+         nb_defm = if_else(typdem %in% c(&quot;1&quot;, &quot;4&quot;), 1, 0)) %&gt;% 
+  group_by(mois) %&gt;% 
+  summarise(nb_dee = sum(nb_dee),
+            nb_des = sum(nb_des),
+            nb_defm = sum(nb_defm)) %&gt;%
+  ungroup()
+
+df_stmt_agregat_creuse</code></pre>
+<pre><code>## # A tibble: 12 x 4
+##    mois  nb_dee nb_des nb_defm
+##    &lt;chr&gt;  &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;
+##  1 01       679    772    8636
+##  2 02       552    699    8554
+##  3 03       538    739    8420
+##  4 04       580    732    8315
+##  5 05       573    697    8277
+##  6 06       542    718    8182
+##  7 07       731    737    8286
+##  8 08       620    669    8336
+##  9 09       850    965    8364
+## 10 10       639    903    8222
+## 11 11       661    818    8167
+## 12 12       561    665    8143</code></pre>
+</div>
+<div id="calcul-de-statistiques" class="section level2">
+<h2>Calcul de statistiques</h2>
+<p>On va faire une analyse rapide de ces données :</p>
+<ul>
+<li>Calculer la DEFM moyenne sur l’année ;</li>
+<li>Ainsi que l’écart-type.</li>
+</ul>
+<pre class="r"><code>df_stmt_agregat_creuse %&gt;% 
+  summarise(mean_defm = mean(nb_defm),
+            sd_defm = sd(nb_defm))</code></pre>
+<pre><code>## # A tibble: 1 x 2
+##   mean_defm sd_defm
+##       &lt;dbl&gt;   &lt;dbl&gt;
+## 1     8325.    152.</code></pre>
+</div>
+<div id="par-sexe" class="section level2">
+<h2>Par sexe</h2>
+<ul>
+<li>Refaire le calcul des agrégats par sexe ;</li>
+</ul>
+<pre class="r"><code>df_stmt_agregat_creuse_sex &lt;- df_stmt_creuse_abc %&gt;% 
+  mutate(nb_dee = if_else(typdem %in% c(&quot;3&quot;, &quot;4&quot;), 1, 0),
+         nb_des = if_else(typdem %in% c(&quot;2&quot;, &quot;5&quot;), 1, 0),
+         nb_defm = if_else(typdem %in% c(&quot;1&quot;, &quot;4&quot;), 1, 0)) %&gt;% 
+  group_by(mois, sex) %&gt;% 
+  summarise(nb_dee = sum(nb_dee),
+            nb_des = sum(nb_des),
+            nb_defm = sum(nb_defm)) %&gt;%
+  ungroup()
+
+df_stmt_agregat_creuse_sex</code></pre>
+<pre><code>## # A tibble: 24 x 5
+##    mois  sex   nb_dee nb_des nb_defm
+##    &lt;chr&gt; &lt;fct&gt;  &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;
+##  1 01    Homme    355    398    4277
+##  2 01    Femme    324    374    4359
+##  3 02    Homme    288    392    4209
+##  4 02    Femme    264    307    4345
+##  5 03    Homme    287    383    4148
+##  6 03    Femme    251    356    4272
+##  7 04    Homme    314    401    4087
+##  8 04    Femme    266    331    4228
+##  9 05    Homme    329    360    4101
+## 10 05    Femme    244    337    4176
+## # ... with 14 more rows</code></pre>
+<ul>
+<li>Calculer la part des femmes dans la DEFM de chaque mois.</li>
+</ul>
+<pre class="r"><code>df_stmt_agregat_creuse_sex %&gt;% 
+  group_by(mois) %&gt;% 
+  mutate(part_femme = nb_defm / sum(nb_defm) * 100) %&gt;% 
+  ungroup() %&gt;% 
+  filter(sex == &quot;Femme&quot;) %&gt;% 
+  select(mois, part_femme)</code></pre>
+<pre><code>## # A tibble: 12 x 2
+##    mois  part_femme
+##    &lt;chr&gt;      &lt;dbl&gt;
+##  1 01          50.5
+##  2 02          50.8
+##  3 03          50.7
+##  4 04          50.8
+##  5 05          50.5
+##  6 06          51.0
+##  7 07          51.1
+##  8 08          51.1
+##  9 09          51.1
+## 10 10          50.9
+## 11 11          50.3
+## 12 12          50.1</code></pre>
+</div>
+</div>
+<div id="analyse-de-la-defm-de-janvier" class="section level1">
+<h1>Analyse de la DEFM de janvier</h1>
+</div>
+<div id="export-des-résultats" class="section level1">
+<h1>Export des résultats</h1>
+</div>
+<div id="bonus-graphiques" class="section level1">
+<h1>BONUS : graphiques</h1>
 </div>
 
 
